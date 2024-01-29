@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+set -euo pipefail
+
+APT_UPDATED=false
+if ! [ -v 1 ] || [ -z "$1" ]; then
+  DISTRO_USER="giggio"
+  echo "User was not passed in, using default: $DISTRO_USER"
+else
+  DISTRO_USER="$1"
+  echo "User will be: $DISTRO_USER"
+fi
+
+update_apt () {
+  if ! $APT_UPDATED; then
+    apt update
+    APT_UPDATED=true
+  fi
+}
+
+setup_as_repo() {
+  if ! hash git 2>/dev/null; then
+    update_apt
+    apt-get install git -y
+  fi
+  if [ -e "$BASEDIR"/.git ]; then
+    cd "$BASEDIR"
+    git pull origin main
+  elif [ -d "$HOME"/p/termux-ubuntu ]; then
+    cd "$HOME"/p/termux-ubuntu
+    git pull origin main
+  else
+    cd "$HOME"/p
+    git clone https://github.com/giggio/termux-ubuntu.git
+    cd termux-ubuntu
+  fi
+}
+
+setup_as_download() {
+  if ! hash curl 2>/dev/null; then
+    update_apt
+    apt-get install curl -y
+  fi
+  setup_user_dir=`mktemp -d`
+  cd "$setup_user_dir"
+  curl -fsSL --output setup-ubuntu.sh https://raw.githubusercontent.com/giggio/termux-ubuntu/main/setup-ubuntu.sh
+  chmod +x setup-ubuntu.sh
+}
+
+# install proot-distro
+if ! hash proot-distro 2>/dev/null; then
+  update_apt
+  apt-get install proot-distro -y
+fi
+if [ -e "$BASEDIR"/.git ] || [ -d "$HOME"/p ]; then
+  setup_as_repo
+else
+  setup_as_download
+fi
+
+. ./setup-ubuntu.sh "$DISTRO_USER"
+
+if grep "proot-distro login" "$HOME"/.bashrc &> /dev/null; then
+  echo "proot-distro login already in .bashrc"
+else
+  echo "Adding 'proot-distro login ubuntu --user $DISTRO_USER' to .bashrc"
+  echo "proot-distro login ubuntu --user $DISTRO_USER" >> "$HOME"/.bashrc
+fi
